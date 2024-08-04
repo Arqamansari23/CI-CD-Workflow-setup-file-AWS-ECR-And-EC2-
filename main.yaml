@@ -1,0 +1,239 @@
+'''
+Overview
+
+This GitHub Actions workflow is designed to automate the process of Continuous Integration (CI) and Continuous Delivery/Deployment (CD). It has three main jobs:
+
+Continuous Integration (CI): Checks out the code, lints it, and runs unit tests.
+Continuous Delivery (CD): Builds a Docker image, tags it, and pushes it to Amazon Elastic Container Registry (ECR).
+Continuous Deployment: Pulls the Docker image from ECR and runs it on a self-hosted runner.
+
+'''
+
+
+#name: Names the workflow workflow.
+#on: push: Triggers the workflow when code is pushed to the main branch, excluding changes to README.md.  
+
+name: workflow
+
+
+on:  # jese hi push hoga kuch bhi main branch per to workflow trigger hojaega likin readme file ko ignore karega 
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+
+permissions:
+  id-token: write
+  contents: read
+
+
+# Defining Jobs 
+
+
+jobs:
+
+ # Job 1: Continuous Integration (CI)
+
+
+# Continuous Integration (CI)
+#This job is designed to ensure that the codebase is in good shape every time a change is pushed to the main branch. Here s how it does that:
+
+#Runs on the latest Ubuntu runner: This means the job will execute on a virtual machine provided by GitHub  which is running the latest version of Ubuntu.
+
+#Steps: The job performs a series of steps to achieve its goal:
+
+
+
+  integration:
+    name: Continuous Integration
+    runs-on: ubuntu-latest
+
+
+    # Step 1: Checkout Code
+    #What it does: This step checks out the code from the repository. This means it fetches the latest version of the code from the main branch and makes it available for the subsequent steps.
+    #Why it's important: You need the latest code to perform any further operations like linting or testing.
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+
+
+      # Step 2: Lint Code
+      #What it does: This is a placeholder step meant to simulate the process of linting the code.
+    #Why it's important: Linting is the process of analyzing code to flag programming errors, bugs, stylistic errors, and suspicious constructs. It's a crucial step in maintaining code quality and ensuring that the code adheres to a set of style guidelines.
+    #In a real-world scenario: You would replace the echo "Linting repository" command with an actual linting command specific to your programming language or framework, such as eslint . for JavaScript or flake8 . for Python.
+      - name: Lint code
+        run: echo "Linting repository"
+
+
+
+     #Step 3: Run Unit Tests
+     #What it does: This is another placeholder step that simulates running unit tests on the code.
+    #Why it's important: Unit tests are automated tests written to ensure that individual units or components of the software work as expected. Running these tests helps catch bugs and issues early in the development process, ensuring that new changes do not break existing functionality.
+    #In a real-world scenario: You would replace the echo "Running unit tests" command with the actual command to run your unit tests, such as npm test for a Node.js project or pytest for a Python project.
+      - name: Run unit tests
+        run: echo "Running unit tests"
+
+
+
+
+
+
+
+
+
+
+#Job 2: Continuous Delivery (CD)
+
+
+#name: Names the job Continuous Delivery.
+#needs: Specifies that this job depends on the completion of the integration job.
+#runs-on: Specifies that the job runs on the latest Ubuntu runner.
+#steps: Checkout Code: Uses the actions/checkout action to check out the repository code again.
+
+#This job takes the code that has passed the Continuous Integration (CI) checks, builds it into a Docker image, tags the image, and pushes it to Amazon Elastic Container Registry (ECR). This ensures that the latest version of the application is packaged and stored in a registry from where it can be deployed.
+
+#Depends on the CI job: This job runs only after the CI job has successfully completed.
+
+#Runs on the latest Ubuntu runner: Similar to the CI job, it uses a virtual machine running the latest version of Ubuntu.
+
+
+  build-and-push-ecr-image:
+    name: Continuous Delivery
+    needs: integration
+    runs-on: ubuntu-latest
+    steps:
+
+
+    #Step 1: Checkout Code
+    #What it does: Checks out the code from the repository. This step ensures that the code used to build the Docker image is the same code that passed the CI checks.
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+
+
+      #Step 2: Install Utilities
+      #What it does: Installs necessary utilities (jq and unzip) that might be needed during the build process.
+      #Why it's important: Ensures the environment has all required tools for subsequent steps.
+      - name: Install Utilities
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq unzip
+
+
+      #Step 3: Configure AWS Credentials
+      #What it does: Configures AWS credentials using secrets stored in the repository. These credentials are necessary to interact with AWS services like ECR.
+      #Why it's important: Securely provides the required authentication to AWS.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+
+
+      # Step 4: Login to Amazon ECR
+      #What it does: Logs in to Amazon ECR.
+      #Why it's important: Authenticates the Docker CLI to push images to the ECR repository.
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      
+      #Step 5: Build, Tag, and Push Image to Amazon ECR
+      #What it does:
+#Build: Builds a Docker image from the Dockerfile in the repository.
+#Tag: Tags the Docker image with a tag (in this case, latest).
+#Push: Pushes the tagged Docker image to the specified ECR repository.
+#Set output: Sets an output variable image with the full URI of the pushed Docker image.
+    #Why it's important:
+#Build: Packages the application into a Docker image.
+#Tag: Identifies the image version.
+#Push: Makes the image available in ECR for deployment.
+#Set output: Provides the image URI for use in subsequent steps or jobs.
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
+          IMAGE_TAG: latest
+        run: |
+          # Build a docker container and
+          # push it to ECR so that it can
+          # be deployed to ECS.
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+
+
+
+
+
+          
+ #job 3 Continuous Deployment 
+
+ #This job takes the Docker image that was pushed to Amazon Elastic Container Registry (ECR) in the previous Continuous Delivery (CD) job and deploys it by running it on a self-hosted runner. This ensures that the latest version of the application is deployed and running.
+
+#Depends on the CD job: This job runs only after the CD job has successfully completed.
+
+#Runs on a self-hosted runner: This means the job will execute on a machine that you manage and configure yourself, rather than a virtual machine provided by GitHub.
+
+#Steps: The job performs a series of steps to achieve its goal:
+
+  Continuous-Deployment:
+    needs: build-and-push-ecr-image
+    runs-on: self-hosted
+    steps:
+
+
+      #Step 1: Checkout Code
+      #What it does: Checks out the code from the repository. This step ensures that any deployment scripts or configuration files in the repository are available for the deployment process.
+      - name: Checkout
+        uses: actions/checkout@v3
+
+
+
+      #Step 2: Configure AWS Credentials
+      #what it does: Configures AWS credentials using secrets stored in the repository. These credentials are necessary to interact with AWS services like ECR.
+      #Why it's important: Securely provides the required authentication to AWS.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+
+
+      #Step 3: Login to Amazon ECR
+      #What it does: Logs in to Amazon ECR.
+      #Why it's important: Authenticates the Docker CLI to pull images from the ECR repository.
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      
+      # Step 4: Pull Latest Image
+      #What it does: Pulls the latest Docker image from the specified ECR repository.
+      #Why it's important: Ensures that the deployment uses the most recent version of the application that was built and pushed in the previous job.
+      - name: Pull latest images
+        run: |
+         docker pull ${{secrets.AWS_ECR_LOGIN_URI}}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
+         
+ 
+       #Step 5: Run Docker Image
+       #What it does: Runs the Docker container in detached mode (-d), exposing port 8080 and setting necessary environment variables.
+      #Why it's important: Starts the application in a container, making it accessible on port 8080. The environment variables are used to configure the application with the required AWS credentials and region.
+      - name: Run Docker Image to serve users
+        run: |
+         docker run -d -p 8080:8080 --ipc="host" --name=mltest -e 'AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}' -e 'AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}' -e 'AWS_REGION=${{ secrets.AWS_REGION }}'  ${{secrets.AWS_ECR_LOGIN_URI}}/${{ secrets.ECR_REPOSITORY_NAME }}:latest
+
+        #Step 6: Clean Previous Images and Containers
+        #What it does: Cleans up unused Docker images and containers to free up space.
+        #Why it's important: Maintains a clean environment by removing unnecessary files and containers, which helps prevent storage issues and keeps the system organized.
+      - name: Clean previous images and containers
+        run: |
+         docker system prune -f
